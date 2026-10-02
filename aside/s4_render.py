@@ -49,9 +49,15 @@ def _page(css: str, kind: str, body: str) -> str:
             f'<body><div class="card {kind}">{body}</div></body></html>')
 
 
+def _meta() -> bool:
+    """작업 이름·원고 번호·기출 횟수 같은 **관리용 표시**를 카드에 찍을지. 기본은 안 찍는다 —
+    보는 사람에게는 내용만(2026-10-03 사용자 요청). 켜려면 aside.config(.local).json 의 card.show_meta: true"""
+    return bool(config.load()["card"].get("show_meta"))
+
+
 def _chrome(chip: str, i: int, total: int) -> str:
-    return (f'<div class="top"><span class="chip"><i></i>{html.escape(chip)}</span>'
-            f'<span class="page"><b>{i:02d}</b> / {total:02d}</span></div>')
+    left = f'<span class="chip"><i></i>{html.escape(chip)}</span>' if _meta() and chip else "<span></span>"
+    return f'<div class="top">{left}<span class="page"><b>{i:02d}</b> / {total:02d}</span></div>'
 
 
 def _foot(handle: str, i: int, total: int, right: str = "") -> str:
@@ -81,7 +87,7 @@ def _art(s: Slide) -> str:
     return (f'<div class="art-fb"><span class="o1"></span><span class="o2"></span><span class="o3"></span>'
             f'<div class="num">{num}</div>'
             f'<div class="tagl">{html.escape(s.section or s.subject)}</div>'
-            f'<div class="tagr">{kind} · {html.escape(s.data_id)}</div></div>')
+            + (f'<div class="tagr">{kind} · {html.escape(s.data_id)}</div>' if _meta() else "") + '</div>')
 
 
 def build(job: Job, s: Slide, post: Dict[str, Any]) -> List[tuple]:
@@ -91,7 +97,7 @@ def build(job: Job, s: Slide, post: Dict[str, Any]) -> List[tuple]:
     cards: List[tuple] = []
 
     cov = post.get("cover", {})
-    hot = f'<span class="badge-hot">기출 {s.q_count}문항</span>' if s.q_count else ""
+    hot = f'<span class="badge-hot">기출 {s.q_count}문항</span>' if s.q_count and _meta() else ""
     cards.append(("cover", lambda i, n: (
         _chrome(chip, i, n)
         + f'<div class="art">{_img(imgdir / f"{s.data_id}-cover.png", "") if (imgdir / f"{s.data_id}-cover.png").exists() else _art(s)}</div>'
@@ -124,7 +130,7 @@ def build(job: Job, s: Slide, post: Dict[str, Any]) -> List[tuple]:
     ex = post.get("exam") or {}
     if ex.get("trap"):
         hist = ""
-        if s.q_count:
+        if s.q_count and _meta():
             detail = s.q_detail if len(s.q_detail) <= 60 else s.q_detail[:58].rsplit("·", 1)[0] + "· …"
             hist = f'<div class="hist">모의고사 <b>{s.q_count}문항</b> 출제 · {html.escape(detail)}</div>'
         cards.append(("exam", lambda i, n: (

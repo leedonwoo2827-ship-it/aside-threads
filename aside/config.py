@@ -26,7 +26,7 @@ DEFAULTS: Dict[str, Any] = {
         "per_post": 2, "workers": 3, "retries": 2,
         "negative": "",
     },
-    "card": {"w": 1080, "h": 1350},
+    "card": {"w": 1080, "h": 1350, "show_meta": False},   # 작업 이름·원고 번호·기출 횟수 표시
     "threads": {"chrome": "", "native_schedule": False, "slots": ["08:30", "19:30"],
                 "max_per_run": 5, "base_port": 9341},
     "ui": {"port": 5291, "width": 460},
