@@ -1,0 +1,18 @@
+# venv / caches
+.venv/
+__pycache__/
+*.pyc
+
+# per-PC settings and Threads login cookies - NEVER commit
+local.json
+aside.config.local.json
+profiles/
+
+# job outputs (keep only the example)
+jobs/*
+!jobs/example/
+jobs/*/job.local.json
+
+logs/
+_context/
+templates/fonts/

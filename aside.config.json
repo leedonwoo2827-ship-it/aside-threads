@@ -1,0 +1,16 @@
+{
+  "models": { "copy": "auto", "image": "auto" },
+  "effort": { "copy": "medium" },
+  "image": {
+    "bg": "#F6F1E8", "accent_a": "#1F4E79", "accent_b": "#9DC3E6",
+    "cover_size": "1536x1024", "spot_size": "1024x1024",
+    "per_post": 2, "workers": 3, "retries": 2
+  },
+  "threads": {
+    "chrome": "",
+    "native_schedule": false,
+    "slots": ["08:30", "19:30"],
+    "base_port": 9341
+  },
+  "ui": { "port": 5291, "width": 460 }
+}
