@@ -8,9 +8,9 @@ cd "$(dirname "$0")"
 export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 [ -x .venv/bin/python ] || { echo "Run ./setup.sh first."; exit 1; }
 if [ $# -eq 0 ]; then
-  printf ']0;aside-threads SERVER - keep open for scheduled posts'
-  echo "This terminal is the aside server. Closing it stops scheduled posts."
-  echo "The side panel window can be closed and reopened at http://127.0.0.1:5291/"
+  printf ']0;aside-threads - keep this window open while posts are scheduled'
+  echo "aside is running. Keep this terminal open - minimize is OK."
+  echo "Closing it stops scheduled posts. Run ./run.sh again to reopen the side panel."
   exec .venv/bin/python -m aside ui
 else
   exec .venv/bin/python -m aside "$@"

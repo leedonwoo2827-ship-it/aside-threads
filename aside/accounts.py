@@ -44,7 +44,9 @@ def add(name: str, label: str = "") -> Dict[str, Any]:
         raise SystemExit(f"이미 있습니다: {name}")
     base = int(config.load()["threads"]["base_port"])
     used = {int(a["port"]) for a in accs}
-    port = next(p for p in range(base, base + 200) if p not in used)
+    from .threads import port_open
+    used.add(int(data.get("panel_port") or base - 1))
+    port = next(p for p in range(base, base + 200) if p not in used and not port_open(p))
     acc = {"name": name, "port": port, "label": label or name}
     accs.append(acc)
     data["accounts"] = accs

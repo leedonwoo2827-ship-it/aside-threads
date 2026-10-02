@@ -11,6 +11,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -68,7 +69,7 @@ class Runner:
             from ..log import detail
             detail(f"$ aside {' '.join(args)}")
             self.proc = subprocess.Popen(
-                [sys.executable, "-m", "aside", *args], cwd=str(config.ROOT), env=env,
+                [child_python(), "-m", "aside", *args], cwd=str(config.ROOT), env=env,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
                 errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             threading.Thread(target=self._pump, args=(self.proc,), daemon=True).start()
@@ -145,7 +146,7 @@ def state() -> Dict[str, Any]:
         "model": loc.get("codex_model"),
         "slots": config.load()["threads"]["slots"],
         "native": bool(config.load()["threads"].get("native_schedule")),
-        "busy": RUN.busy, "cmd": RUN.cmd,
+        "busy": RUN.busy, "cmd": RUN.cmd, "app": "aside",
     }
 
 
@@ -329,7 +330,8 @@ def pick(body: Pick) -> Dict[str, Any]:
         if not d.is_dir():
             raise HTTPException(400, f"폴더를 찾을 수 없어요: {d}")
         return {"folder": str(d), "files": sorted(str(p) for p in d.glob("*.html"))}
-    r = subprocess.run([sys.executable, "-m", "aside.pick", body.kind], cwd=str(config.ROOT),
+    r = subprocess.run([child_python(), "-m", "aside.pick", body.kind], cwd=str(config.ROOT),
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                        capture_output=True, text=True, encoding="utf-8", timeout=600,
                        env=dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8"))
     if r.returncode != 0:
@@ -496,10 +498,10 @@ def plan(body: Plan) -> List[Dict[str, Any]]:
 # ── 띄우기 ───────────────────────────────────────────────────────────────────
 def _open_panel(port: int) -> None:
     """오른쪽 좁은 앱창. 디버그 포트를 달아 두고, 뜬 뒤 화면 오른쪽 끝에 정확히 붙인다(threads.place)."""
-    from ..threads import chrome_path, panel_port, place, port_open, screen, wait_port
+    from ..threads import chrome_path, pick_panel_port, place, port_open, screen, wait_port
     width = int(config.load()["ui"]["width"])
     url = f"http://127.0.0.1:{port}/"
-    pport = panel_port()
+    pport = pick_panel_port(port)
     if port_open(pport):          # 이미 떠 있는 패널 — 새로 띄우지 않고 앞으로 가져와 붙인다
         try:
             place(pport, "right")
@@ -540,11 +542,85 @@ def arrange_windows(body: Arrange) -> Dict[str, Any]:
     return {"done": threads.arrange(acc)}
 
 
+@app.post("/api/quit")
+def quit_app() -> Dict[str, Any]:
+    """「프로그램 끄기」 — 패널 창과 서버를 함께 끈다. 걸어 둔 aside 예약은 다음에 켤 때 이어서 올라간다."""
+    RUN.stop()
+
+    def _bye():
+        time.sleep(0.6)
+        try:
+            from ..threads import panel_port, port_open
+            if port_open(panel_port()):
+                urllib.request.urlopen(urllib.request.Request(
+                    f"http://127.0.0.1:{panel_port()}/json/close/" + _panel_target(), method="PUT"), timeout=2)
+        except Exception:
+            pass
+        os._exit(0)
+
+    threading.Thread(target=_bye, daemon=True).start()
+    return {"ok": True}
+
+
+def _panel_target() -> str:
+    import json as _json
+    from ..threads import panel_port
+    tabs = _json.load(urllib.request.urlopen(f"http://127.0.0.1:{panel_port()}/json/list", timeout=2))
+    return next(t["id"] for t in tabs if t.get("type") == "page")
+
+
+def _quiet_stdio() -> None:
+    """검은 창 없이(pythonw) 뜨면 표준출력이 없다 — 로그를 파일로 돌린다."""
+    if sys.stdout is None or sys.stderr is None:
+        config.LOGS.mkdir(parents=True, exist_ok=True)
+        f = open(config.LOGS / "server.log", "a", encoding="utf-8", buffering=1)
+        sys.stdout = sys.stdout or f
+        sys.stderr = sys.stderr or f
+
+
+def _is_aside(port: int) -> bool:
+    import json as _json
+    try:
+        return _json.load(urllib.request.urlopen(f"http://127.0.0.1:{port}/api/state", timeout=1)).get("app") == "aside"
+    except Exception:
+        return False
+
+
+def child_python() -> str:
+    """하위 작업은 python.exe 로 — pythonw 는 출력이 없어 로그 창이 빈다(창은 CREATE_NO_WINDOW 로 숨김)."""
+    exe = Path(sys.executable)
+    if exe.name.lower() == "pythonw.exe" and (exe.parent / "python.exe").exists():
+        return str(exe.parent / "python.exe")
+    return sys.executable
+
+
 def serve(window: bool = True) -> None:
     import uvicorn
-    port = int(os.environ.get("ASIDE_PORT") or config.load()["ui"]["port"])
+    from ..threads import port_open
+    _quiet_stdio()
+    want = int(os.environ.get("ASIDE_PORT") or config.load()["ui"]["port"])
+    # ★ 이런 도구를 여러 개 쓰는 PC 는 포트가 자주 겹친다. 5291 부터 위로 보면서
+    #   · aside 가 이미 켜져 있으면 → 패널만 다시 열고 끝(서버 둘이 예약을 두 번 올리면 안 된다)
+    #   · 다른 프로그램이 쓰고 있으면 → 다음 번호로
+    port = want
+    for cand in range(want, want + 20):
+        if not port_open(cand):
+            port = cand
+            break
+        if _is_aside(cand):
+            log(f"이미 켜져 있어요. 패널을 다시 열어요. (주소 http://127.0.0.1:{cand}/)")
+            if window:
+                _open_panel(cand)
+            return
+    else:
+        raise SystemExit(f"{want}~{want + 19} 포트가 모두 쓰이고 있어요. 다른 프로그램을 몇 개 닫고 다시 켜 주세요.")
+    if port != want:
+        log(f"{want} 번은 다른 프로그램이 쓰고 있어서 {port} 번으로 켰어요.")
+    data = config.local()
+    data["ui_port"] = port
+    config.save_local(data)
     threading.Thread(target=_scheduler, daemon=True).start()
     if window:
         threading.Timer(1.2, _open_panel, args=(port,)).start()
-    log(f"aside 가 켜졌어요. 패널 주소: http://127.0.0.1:{port}/  (예약을 걸었으면 이 창을 끄지 마세요)")
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+    log(f"aside 가 켜졌어요. 이 검은 창을 닫으면 예약이 멈춰요 (최소화는 괜찮아요). 패널 주소: http://127.0.0.1:{port}/")
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning", log_config=None)

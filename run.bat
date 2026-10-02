@@ -14,9 +14,12 @@ if not exist ".venv\Scripts\python.exe" (
   exit /b 1
 )
 if "%~1"=="" (
-  title aside-threads SERVER - keep this window open for scheduled posts - minimize is OK
-  echo This window is the aside server. Closing it stops scheduled posts.
-  echo The side panel window can be closed and reopened at http://127.0.0.1:5291/
+  title aside-threads - KEEP THIS WINDOW OPEN while posts are scheduled - minimize is OK
+  echo.
+  echo   aside is running. Keep this window open - minimize is OK.
+  echo   Closing this window stops scheduled posts.
+  echo   The side panel can be closed and reopened by running run.bat again.
+  echo.
   ".venv\Scripts\python" -m aside ui
 ) else (
   ".venv\Scripts\python" -m aside %*

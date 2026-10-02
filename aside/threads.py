@@ -93,7 +93,7 @@ def screen() -> tuple:
             _SCREEN = (u.GetSystemMetrics(0), u.GetSystemMetrics(1))
         else:
             # macOS·Linux: tkinter 는 메인 스레드를 가리므로 별도 프로세스로 묻는다
-            r = subprocess.run([sys.executable, "-c",
+            r = subprocess.run([sys.executable.replace("pythonw", "python"), "-c",
                                 "import tkinter as t;r=t.Tk();r.withdraw();"
                                 "print(r.winfo_screenwidth(), r.winfo_screenheight())"],
                                capture_output=True, text=True, timeout=10)
@@ -143,8 +143,40 @@ def wait_port(port: int, tries: int = 60) -> bool:
 PANEL_PORT_OFFSET = -1      # 패널 Chrome 의 디버그 포트 = base_port - 1
 
 
+def free_port(start: int, avoid=(), span: int = 60) -> int:
+    """start 부터 위로 비어 있는 포트 하나. 이런 도구를 여러 개 쓰는 PC 는 포트가 자주 겹친다."""
+    for p in range(start, start + span):
+        if p not in avoid and not port_open(p):
+            return p
+    raise SystemExit(f"{start} 근처에 빈 포트가 없어요 — 다른 프로그램을 몇 개 닫고 다시 해 주세요")
+
+
 def panel_port() -> int:
-    return int(config.load()["threads"]["base_port"]) + PANEL_PORT_OFFSET
+    """패널 Chrome 의 디버그 포트. 기억해 둔 값 → 없으면 base_port-1. 실제로 고르는 건 pick_panel_port()."""
+    saved = config.local().get("panel_port")
+    return int(saved) if saved else int(config.load()["threads"]["base_port"]) + PANEL_PORT_OFFSET
+
+
+def is_our_panel(port: int, ui_port: int) -> bool:
+    """그 포트의 Chrome 이 aside 패널인가(다른 도구의 Chrome 일 수도 있다)."""
+    import json as _json
+    try:
+        tabs = _json.load(urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list", timeout=1))
+        return any(str(t.get("url", "")).startswith(f"http://127.0.0.1:{ui_port}/") for t in tabs)
+    except Exception:
+        return False
+
+
+def pick_panel_port(ui_port: int) -> int:
+    p = panel_port()
+    if not port_open(p) or is_our_panel(p, ui_port):
+        return p
+    used = {int(a["port"]) for a in accounts.all_()}
+    p = free_port(int(config.load()["threads"]["base_port"]) - 40, avoid=used)
+    data = config.local()
+    data["panel_port"] = p
+    config.save_local(data)
+    return p
 
 
 def place(port: int, side: str) -> None:

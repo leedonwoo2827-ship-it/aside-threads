@@ -292,8 +292,8 @@ async function openDetail(id) {
         <input type="datetime-local" id="when" value="${esc(sc.when ? sc.when.replace(" ", "T") : d.next_slot)}" style="flex:1">
         ${sc.when ? `<button id="bUnsched">예약 취소</button>` : `<button id="bSched">예약</button>`}
       </div>
-      ${sc.when ? `<p class="note">⏰ ${esc(sc.when)} · ${sc.mode === "native" ? "Threads 에 예약됨" : "예약됨 (이 프로그램이 켜져 있어야 올라가요)"}</p>`
-                : `<p class="note">${S.state.native ? "Threads 에 바로 예약해요." : "정한 시간이 되면 이 프로그램이 왼쪽 창으로 올려요."}</p>`}
+      ${sc.when ? `<p class="note">⏰ ${esc(sc.when)} · ${sc.mode === "native" ? "Threads 에 예약됨" : "예약됨 (검은 창이 켜져 있으면 패널을 닫아도 올라가요)"}</p>`
+                : `<p class="note">${S.state.native ? "Threads 에 바로 예약해요." : "정한 시간이 되면 왼쪽 창으로 올려요. 검은 창은 켜 두세요."}</p>`}
     </div>`}`;
   $("#bBack").onclick = () => { S.detail = null; refresh() };
   document.querySelectorAll(".carousel img").forEach(img => img.onclick = () => { $("#zoomImg").src = img.src; $("#zoom").showModal() });
@@ -385,8 +385,17 @@ function viewHelp() {
     <li>「로그인해 주세요」 → 위의 「로그인」을 누르고 왼쪽 창에서 로그인</li>
     <li>그래도 안 되면 → 담당자에게 <code>logs</code> 폴더를 보내 주세요</li>
   </ul>
+  <h3 style="color:var(--a)">끄기</h3>
+  <p class="note">예약을 걸었다면 <b>검은 창은 켜 두세요</b>(최소화는 괜찮아요). 이 작은 패널은 닫아도 되고, run.bat 을 다시 누르면 다시 열려요.<br>
+  완전히 끄려면 검은 창을 닫거나 아래 버튼을 누르세요 (걸어 둔 예약은 다음에 켤 때 이어서 올라가요).</p>
+  <div class="bar"><button class="hot" id="bQuit">프로그램 끄기</button></div>
   <div class="bar"><button id="bDoc">점검하기</button><button id="bProbe" title="담당자용 — 글쓰기 창 구조를 기록해 둡니다">글쓰기 창 기록(담당자용)</button></div>`;
   $("#bDoc").onclick = () => run(["doctor"]);
+  $("#bQuit").onclick = async () => {
+    if (!confirm("aside 를 끌까요? 걸어 둔 예약은 다음에 켤 때 이어서 올라가요.")) return;
+    await api("/api/quit", {method: "POST"}).catch(() => {});
+    document.body.innerHTML = '<div class="empty" style="margin:40px 16px">aside 를 껐어요. 다시 쓰려면 run.bat 을 누르세요.</div>';
+  };
   $("#bProbe").onclick = () => $("#acc").value && run(["probe", "--account", $("#acc").value]);
 }
 
