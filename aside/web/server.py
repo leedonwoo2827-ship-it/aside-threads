@@ -27,7 +27,7 @@ from ..s4_render import plain_title
 
 STATIC = Path(__file__).parent / "static"
 ALLOWED = {"make", "s1-copy", "s2-imgjson", "s3-images", "s4-render", "post", "plan", "queue",
-           "login", "probe", "doctor", "fonts"}
+           "login", "probe", "doctor", "fonts", "codex-login"}
 
 app = FastAPI(title="aside")
 
@@ -41,7 +41,7 @@ def label(args: List[str]) -> str:
     names = {"make": "딸깍 만들기", "s1-copy": "글 쓰기", "s2-imgjson": "그림 설명 준비",
              "s3-images": "그림 그리기", "s4-render": "카드 다시 만들기", "queue": "예약 시간 확인",
              "plan": "예약 자동 배치", "login": "로그인 창 열기", "probe": "글쓰기 창 구조 확인",
-             "doctor": "점검", "fonts": "글꼴 받기"}
+             "doctor": "점검", "fonts": "글꼴 받기", "codex-login": "Codex 로그인"}
     return names.get(cmd, cmd)
 
 
@@ -89,7 +89,11 @@ class Runner:
         if self.busy:
             self.stopped = True
             self.lines.append("■ 멈췄어요. 이미 된 건 남아 있고, 다시 누르면 남은 것만 이어서 해요.")
-            self.proc.terminate()
+            if sys.platform.startswith("win"):
+                subprocess.run(["taskkill", "/PID", str(self.proc.pid), "/T", "/F"],
+                               capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            else:
+                self.proc.terminate()
 
 
 RUN = Runner()
@@ -143,6 +147,16 @@ def state() -> Dict[str, Any]:
         "native": bool(config.load()["threads"].get("native_schedule")),
         "busy": RUN.busy, "cmd": RUN.cmd,
     }
+
+
+@app.get("/api/codex")
+def codex_status() -> Dict[str, Any]:
+    """Codex(ChatGPT) 로그인 상태 — 패널 맨 위에 보인다. 파일만 보므로 빠르다(세션이 죽었는지는 모른다)."""
+    from ..llm import codex_auth
+    restored = codex_auth.restore_if_needed()     # 로그인 도중 「중지」로 끊겼으면 원래 로그인으로
+    st = codex_auth.status()
+    return {"installed": st["installed"], "logged_in": st["authenticated"], "email": st["email"],
+            "restored": restored}
 
 
 @app.get("/api/log")

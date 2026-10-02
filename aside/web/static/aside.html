@@ -73,6 +73,11 @@ dialog::backdrop{background:rgba(30,41,59,.35)}
 <body>
 <header>
   <div class="brand"><b>aside · Threads</b><span class="row" style="gap:8px"><small id="model"></small><button id="btnArrange" title="Threads 창은 왼쪽, 패널은 오른쪽에 딱 붙입니다" style="padding:2px 8px;font-size:12px">⇔ 창 정렬</button></span></div>
+  <div class="row" style="margin-bottom:6px">
+    <span class="dot" id="cxdot"></span>
+    <span id="cxtxt" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px">Codex 확인 중…</span>
+    <button id="btnCodex" title="글·그림을 만드는 ChatGPT 계정으로 로그인합니다">Codex 로그인</button>
+  </div>
   <div class="row">
     <span class="dot" id="acdot" title="로그인 상태"></span>
     <select id="acc" title="게시 계정"></select>
@@ -87,6 +92,12 @@ dialog::backdrop{background:rgba(30,41,59,.35)}
   <nav><button data-tab="posts" class="on">게시물</button><button data-tab="sched">예약</button><button data-tab="help">도움말</button></nav>
 </header>
 <main id="main"></main>
+<div id="loginBar" style="display:none;position:fixed;left:10px;right:10px;bottom:calc(var(--logh,180px) + 10px);z-index:30;
+  background:#FFF7E0;border:1px solid #F2D27A;border-radius:12px;padding:10px 12px;box-shadow:0 6px 18px rgba(30,41,59,.18)">
+  <div style="font-weight:700;color:#7A5300;margin-bottom:6px">브라우저가 안 열렸나요?</div>
+  <div class="row"><a id="loginLink" target="_blank" rel="noopener" class="btnlike" style="text-decoration:none;color:var(--a);font-weight:700">🔑 로그인 페이지 열기</a>
+  <button id="loginClose" style="margin-left:auto">닫기</button></div>
+</div>
 <div id="logbox"><div id="grip" title="끌어서 높이 조절 · 더블클릭: 크게/작게"></div><div class="hd"><span id="logst">대기 중</span><span style="flex:none"><button id="btnStop">중지</button> <button id="btnClr">지우기</button></span></div><div id="log"></div></div>
 
 <dialog id="dlgAcc"><form method="dialog">
@@ -137,6 +148,15 @@ async function loadState() {
     : `<option value="">원고 없음 — ＋원고</option>`;
   checkLogin();
 }
+async function checkCodex() {
+  const c = await api("/api/codex").catch(() => null); if (!c) return;
+  $("#cxdot").className = "dot " + (c.logged_in ? "on" : "off");
+  $("#cxtxt").textContent = !c.installed ? "Codex 가 설치되어 있지 않아요 (setup 다시 실행)"
+    : c.logged_in ? `Codex · ${c.email || "로그인됨"}` : "Codex 로그인이 필요해요";
+  $("#btnCodex").textContent = c.logged_in ? "다른 계정" : "Codex 로그인";
+  $("#btnCodex").className = c.logged_in ? "" : "pri";
+  $("#btnCodex").disabled = !c.installed;
+}
 async function checkLogin() {
   const a = $("#acc").value; const d = $("#acdot");
   if (!a) { d.className = "dot"; return }
@@ -157,6 +177,13 @@ async function pollLog() {
   if (r) {
     logNext = r.next;
     if (r.lines.length) {
+      // 「Codex 로그인」이 내보낸 로그인 주소 → 버튼으로 (긴 주소를 로그에 그대로 보이지 않는다)
+      r.lines = r.lines.filter(l => {
+        const m = l.match(/LOGIN_URL (https:\/\/\S+)/);
+        if (!m) return true;
+        $("#loginLink").href = m[1]; $("#loginBar").style.display = "block";
+        return false;
+      });
       const el = $("#log");
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
       el.textContent += r.lines.join("\n") + "\n";
@@ -166,7 +193,7 @@ async function pollLog() {
     st.textContent = r.busy ? `⏳ ${r.label} 하는 중…` : r.code == null ? "대기 중"
       : r.code === 0 ? "✓ 다 됐어요" : r.code === -1 ? "■ 멈춤" : "✗ 중간에 멈췄어요";
     st.className = r.busy ? "run" : r.code === 0 ? "ok" : r.code > 0 ? "bad" : "";
-    if (wasBusy && !r.busy) refresh();
+    if (wasBusy && !r.busy) { refresh(); checkCodex(); $("#loginBar").style.display = "none" }
     wasBusy = r.busy;
   }
 }
@@ -429,12 +456,19 @@ $("#btnDelJob").onclick = async () => {
   S.job = ""; S.detail = null; await loadState(); refresh();
 };
 $("#btnArrange").onclick = async () => { const r = await api("/api/arrange", {method: "POST", body: {account: $("#acc").value || ""}}); if (!r.done.length) alert("정렬할 창이 없습니다 — Threads 창은 「로그인」으로 띄우세요") };
+$("#btnCodex").onclick = async () => {
+  const again = $("#btnCodex").textContent === "다른 계정";
+  if (again && !confirm("다른 ChatGPT 계정으로 바꿀까요? 브라우저에서 새로 로그인하게 됩니다.")) return;
+  setLogH(Math.max($("#logbox").offsetHeight, 240));
+  run(["codex-login"]);
+};
+$("#loginClose").onclick = () => { $("#loginBar").style.display = "none" };
 $("#btnStop").onclick = () => api("/api/stop", {method: "POST"});
 $("#btnClr").onclick = () => { $("#log").textContent = "" };
 $("#zoom").onclick = () => $("#zoom").close();
 setInterval(checkLogin, 20000);
 
-loadState().then(refresh); pollLog();
+loadState().then(refresh); pollLog(); checkCodex(); setInterval(checkCodex, 30000);
 </script>
 </body>
 </html>

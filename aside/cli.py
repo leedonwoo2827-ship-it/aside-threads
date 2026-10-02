@@ -128,6 +128,57 @@ def cmd_doctor(_a=None) -> int:
     return bad
 
 
+def cmd_codex_login(_a=None) -> int:
+    """`codex login` 을 대신 돌린다 — 패널의 「Codex 로그인」. 브라우저가 열리고, 로그인하면 끝난다.
+
+    로그인 주소가 나오면 그 줄을 그대로 흘린다 — 패널이 그 주소를 「로그인 페이지 열기」 버튼으로 바꾼다
+    (브라우저가 저절로 안 열리는 PC 대비). 계정이 바뀔 수 있으니 끝나면 모델 탐지 기록을 지운다."""
+    import re
+    import subprocess
+    from .llm import codex_auth
+    exe = codex_auth.codex_path()
+    if not exe:
+        log("✗ Codex 가 설치되어 있지 않아요. setup 을 다시 실행하거나 담당자에게 문의해 주세요.")
+        return 1
+    had = codex_auth.backup()       # codex login 은 시작하자마자 기존 로그인을 지운다 — 떠 둔다
+    log("브라우저에 ChatGPT 로그인 화면이 열려요. 회사 ChatGPT 계정으로 로그인하고 「계속」을 눌러 주세요.")
+    log("  (5분 안에 해 주세요. 브라우저가 안 열리면 아래에 나오는 「로그인 페이지 열기」를 누르세요)")
+    proc = subprocess.Popen([exe, "login"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace")
+    shown = False
+    try:
+        for line in proc.stdout:
+            line = line.strip()
+            detail(f"codex login: {line}")
+            m = re.search(r"https://auth\.openai\.com/\S+", line)
+            if m and not shown:
+                log(f"LOGIN_URL {m.group(0)}")      # 패널이 버튼으로 바꾼다
+                shown = True
+        code = proc.wait(timeout=300)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        if codex_auth.restore_if_needed():
+            log("✗ 시간이 지나 로그인을 멈췄어요. 원래 쓰던 로그인은 그대로 두었어요.")
+        else:
+            log("✗ 시간이 지나 로그인을 멈췄어요. 「Codex 로그인」을 다시 눌러 주세요.")
+        return 1
+    st = codex_auth.status()
+    if code == 0 and st["authenticated"]:
+        data = config.local()
+        data.pop("codex_model", None)            # 계정이 바뀌었을 수 있다 — 다음에 다시 찾는다
+        data.pop("codex_image_model", None)
+        config.save_local(data)
+        codex_auth.drop_backup()
+        log(f"✓ Codex 로그인 완료 ({st['email'] or 'ChatGPT 계정'})")
+        return 0
+    if had and codex_auth.restore_if_needed():
+        log("✗ 로그인이 끝나지 않았어요. 원래 쓰던 로그인은 그대로 두었어요.")
+    else:
+        log("✗ 로그인이 끝나지 않았어요. 「Codex 로그인」을 다시 눌러 주세요.")
+    return 1
+
+
 def cmd_account(a) -> None:
     if a.action == "add":
         acc = accounts.add(a.name, a.label or "")
@@ -273,6 +324,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--no-window", action="store_true")
     sub.add_parser("fonts")
     sub.add_parser("doctor")
+    sub.add_parser("codex-login")
 
     a = ap.parse_args(argv)
     try:
@@ -330,6 +382,8 @@ def _dispatch(a, ap) -> int:
         server.serve(window=not a.no_window)
     elif a.cmd == "fonts":
         cmd_fonts()
+    elif a.cmd == "codex-login":
+        return cmd_codex_login()
     elif a.cmd == "doctor":
         return 1 if cmd_doctor() else 0
     else:

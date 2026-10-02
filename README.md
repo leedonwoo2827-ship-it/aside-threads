@@ -13,11 +13,11 @@
 | | Windows | macOS · Linux |
 |---|---|---|
 | 설치 | `setup.bat` | `./setup.sh` |
-| 로그인 | `codex login` | `codex login` |
+| 로그인 | 패널의 「Codex 로그인」 | 패널의 「Codex 로그인」 |
 | 실행 | `run.bat` | `./run.sh` |
 
 - 설치: venv · 패키지 · Playwright Chromium · 글꼴 · 점검. 필요: Python 3.11+, Google Chrome, Codex CLI.
-- `codex login` 은 회사 ChatGPT 계정으로 사람마다 따로 합니다.
+- Codex 로그인은 회사 ChatGPT 계정으로 사람마다 따로 합니다. **패널 맨 위 「Codex 로그인」 버튼**으로 하면 됩니다(터미널의 `codex login` 과 같음). 로그인 도중 취소해도 원래 쓰던 로그인은 그대로 남습니다.
 - 실행하면 서버 창(콘솔/터미널)과 오른쪽 패널이 뜹니다. **예약을 걸어 뒀으면 서버 창을 켜 두세요**(최소화는 괜찮음). 패널 창은 닫아도 `http://127.0.0.1:5291` 로 다시 열립니다.
 - Linux 는 폴더·파일 선택 창에 `python3-tk` 가 필요합니다(`sudo apt install python3-tk`). 없으면 경로를 붙여 넣는 칸이 대신 뜹니다.
 
