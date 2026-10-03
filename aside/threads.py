@@ -296,6 +296,37 @@ def _open_composer(s: Session, text: str):
     return dlg
 
 
+def _settle_topic(s: Session, topic: str) -> None:
+    """본문 끝의 #주제 때문에 Threads 가 띄우는 「주제 고르기」 목록을 처리한다.
+
+    ★ 2026-10-03 실측: `#ADsP` 를 넣으면 ADsP·Ad Spend·AdSpy… 목록이 작성창을 덮고, 그 바람에
+      「스레드에 추가」를 못 눌러 게시가 멈췄다. 사람이 「ADsP」를 눌러야 넘어갔다.
+      → 목록에서 주제와 **정확히 같은** 항목을 눌러 주제 태그로 만들고, 없으면 Esc 로 닫는다."""
+    page = s.page
+    if not topic:
+        return
+    exact = re.compile(rf"^\s*#?{re.escape(topic)}\s*$", re.I)
+    for _ in range(12):           # 목록은 조금 늦게 뜬다 — 최대 3초
+        opts = page.get_by_role("option").filter(has_text=exact)
+        if not opts.count():
+            opts = page.locator('[role="listbox"] *, [role="menu"] *').filter(has_text=exact)
+        if opts.count():
+            try:
+                opts.first.click(timeout=3_000)
+                detail(f"  주제 태그 선택: {topic}")
+                time.sleep(0.6)
+                return
+            except Exception as e:
+                detail(f"  주제 목록 클릭 실패: {e}")
+                break
+        time.sleep(0.25)
+    # 목록이 안 떴거나 같은 이름이 없다 — 떠 있는 목록만 닫는다(작성창은 닫히지 않게 한 번만)
+    if page.get_by_role("option").count() or page.locator('[role="listbox"]').count():
+        page.keyboard.press("Escape")
+        detail("  주제 목록 닫음(Esc)")
+        time.sleep(0.4)
+
+
 def _attach(s: Session, dlg, files: List[Path]) -> None:
     if not files:
         return
@@ -410,6 +441,7 @@ def publish(acc: Dict[str, Any], post: Dict[str, Any], cards: List[Path], *, top
             try:
                 log("  ① 글쓰기 창을 여는 중")
                 dlg = _open_composer(s, text)
+                _settle_topic(s, topic)
                 log(f"  ② 카드 {len(cards)}장을 붙이는 중 …")
                 _attach(s, dlg, cards)
                 if (post.get("reply") or "").strip():
